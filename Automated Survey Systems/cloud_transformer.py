@@ -28,23 +28,32 @@ def write_cloud(pc: o3d.t.geometry.PointCloud, filepath: str):
 
 
 def update_las(las: lp.LasData, points: np.ndarray, crs: proj.CRS) -> lp.LasData:
-    offset = np.mean(points, axis=0)
+    # https://www.asprs.org/a/society/committees/standards/asprs_las_format_v12.pdf
+    # https://laspy.readthedocs.io/en/latest/intro.html
+    x_min, y_min, z_min = np.min(points, axis=0)
+    x_max, y_max, z_max = np.max(points, axis=0)
+    offset = np.mean(
+        np.array(
+            (
+                (x_min, y_min, z_min),
+                (x_max, y_max, z_max)
+            )
+        ),
+        axis=0
+    )
     xyz: np.ndarray = np.round((points - offset) * 1000).astype("int32")
-    x = xyz[:,0]
-    y = xyz[:,1]
-    z = xyz[:,2]
     
     las.header.offsets = offset
     las.header.add_crs(crs)
-    las.header.x_min = np.min(x)
-    las.header.x_max = np.max(x)
-    las.header.y_min = np.min(y)
-    las.header.y_max = np.max(y)
-    las.header.z_min = np.min(z)
-    las.header.z_max = np.max(z)
-    las.points.X = x
-    las.points.Y = y
-    las.points.Z = z
+    las.header.x_min = x_min
+    las.header.x_max = x_max
+    las.header.y_min = y_min
+    las.header.y_max = y_max
+    las.header.z_min = z_min
+    las.header.z_max = z_max
+    las.points.X = xyz[:,0]
+    las.points.Y = xyz[:,1]
+    las.points.Z = xyz[:,2]
     
     return las
 
@@ -93,6 +102,3 @@ def cli():
 
 if __name__ == "__main__":
     cli()
-
-# https://www.asprs.org/a/society/committees/standards/asprs_las_format_v12.pdf
-# https://laspy.readthedocs.io/en/latest/intro.html
