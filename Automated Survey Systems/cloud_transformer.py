@@ -1,11 +1,16 @@
 import argparse
 from textwrap import dedent
+from copy import deepcopy
+from typing import Callable
 
 import numpy as np
 import open3d as o3d
 import laspy as lp
 import pyproj as proj
 from pyproj.transformer import TransformerGroup
+
+
+transformer = Callable[[np.ndarray], np.ndarray]
 
 
 def load_las(filepath: str) -> lp.LasData:
@@ -58,7 +63,21 @@ def update_las(las: lp.LasData, points: np.ndarray, crs: proj.CRS) -> lp.LasData
     return las
 
 
-def utm34n_to_eov(points: np.ndarray) -> np.ndarray:
+def etrs_to_eov(points: np.ndarray) -> np.ndarray:
+    etrs = proj.CRS.from_epsg(7931)
+    eov = proj.CRS.from_epsg(10660)
+
+    tg = TransformerGroup(etrs, eov)
+    if not tg.best_available:
+        print("Best transformation is not available, grid files are probably missing.")
+        print("Downloading grid files...")
+        tg.download_grids(verbose=True)
+    
+    e, n, z = proj.transform(etrs, eov, points[:,0], points[:,1], points[:,2], always_xy=True)
+    return np.column_stack((e, n, z))
+
+
+def quasi_utm34n_to_eov(points: np.ndarray) -> np.ndarray:
     utm34n = proj.CRS.from_epsg(32634).to_3d()
     wgs84 = proj.CRS.from_epsg(4326).to_3d()
     etrs = proj.CRS.from_epsg(7931)
@@ -78,6 +97,16 @@ def utm34n_to_eov(points: np.ndarray) -> np.ndarray:
     return np.column_stack((e, n, z))
 
 
+def transform_las(las: lp.LasData, func: transformer, crs: proj.CRS = None, inplace: bool = False) -> lp.LasData:
+    if not inplace:
+        las = deepcopy(las)
+    
+    points_new = func(las.xyz)
+    update_las(las, points_new, crs)
+
+    return las
+
+
 def cli():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -95,8 +124,7 @@ def cli():
     args = parser.parse_args()
 
     cloud = load_las(args.input)
-    points_eov = utm34n_to_eov(cloud.xyz)
-    update_las(cloud, points_eov, proj.CRS.from_epsg(10660))
+    transform_las(cloud, quasi_utm34n_to_eov, proj.CRS.from_epsg(10660), True)
     write_las(cloud, args.output)
 
 
