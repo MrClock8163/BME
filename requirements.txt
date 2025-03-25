@@ -4,3 +4,4 @@ matplotlib
 open3d
 laspy
 pyproj
+georinex==1.16.1
