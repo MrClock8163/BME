@@ -77,6 +77,25 @@ def etrs_to_eov(points: np.ndarray) -> np.ndarray:
     return np.column_stack((e, n, z))
 
 
+def utm34n_to_eov(points: np.ndarray) -> np.ndarray:
+    utm34n = proj.CRS.from_epsg(32634)
+    etrs = proj.CRS.from_epsg(7931)
+    eov = proj.CRS.from_epsg(10660)
+
+    tg = TransformerGroup(etrs, eov)
+    if not tg.best_available:
+        print("Best transformation is not available, grid files are probably missing.")
+        print("Downloading grid files...")
+        tg.download_grids(verbose=True)
+    
+    utm2etrs = proj.Transformer.from_crs(utm34n, etrs, always_xy=True)
+    etrs2eov = proj.Transformer.from_crs(etrs, eov, always_xy=True)
+    lon, lat = utm2etrs.transform(points[:,0], points[:,1])
+    e, n, z = etrs2eov.transform(lon, lat, points[:,2])
+
+    return np.column_stack((e, n, z))
+
+
 def quasi_utm34n_to_eov(points: np.ndarray) -> np.ndarray:
     utm34n = proj.CRS.from_epsg(32634).to_3d()
     wgs84 = proj.CRS.from_epsg(4326).to_3d()
@@ -124,7 +143,7 @@ def cli():
     args = parser.parse_args()
 
     cloud = load_las(args.input)
-    transform_las(cloud, quasi_utm34n_to_eov, proj.CRS.from_epsg(10660), True)
+    transform_las(cloud, utm34n_to_eov, proj.CRS.from_epsg(10660), True)
     write_las(cloud, args.output)
 
 
