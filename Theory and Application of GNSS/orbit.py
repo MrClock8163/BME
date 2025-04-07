@@ -17,26 +17,27 @@ def main():
     orb.load_usable_navdata()
     orb.calc_sat_ecef_xyz()
 
-    london = load_coords(
+    station = ("LICC00GBR", 3978703.5690, -12141.0380, 4968417.2180)
+    station_df = load_coords(
         [
-            ("LICC00GBR", 3978703.5690, -12141.0380, 4968417.2180)
+            station
         ],
         'XYZ'
     )
 
     ecef = orb.sat_xyz
     transf = Transformer(Ellipsoid.wgs84())
-    aer = transf.xyz2aer(ecef, london)
+    aer = transf.xyz2aer(ecef, station_df)
 
     coords = pd.concat([ecef, aer], axis=1)
     coords.to_csv(
         os.path.join(
             savedir,
-            f"satcoords_LICC00GBR_{epoch:%Y%m%d_%H%M%S}.csv"
+            f"satcoords_{station[0]:s}_{epoch:%Y%m%d_%H%M%S}.csv"
         )
     )
 
-    skyplot(coords, london, epoch, 10, True)
+    skyplot(coords, station_df, epoch, 10, True)
 
 
 if __name__ == "__main__":

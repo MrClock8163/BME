@@ -402,6 +402,9 @@ class Orbit:
         return df
 
     def calc_sat_ecef_xyz(self):
+        """Calculates ECEF XYZ coordinates of all satellites
+        at the observation epoch and stores them internally.
+        """
         ecef = self.calc_ecef_xyz_gps_gal_bd()
         ecef_glo = self.calc_ecef_xyz_glo()
         self.sat_xyz = pd.concat([ecef, ecef_glo], axis=0)
