@@ -7,6 +7,7 @@ import pandas as pd
 import georinex as gr
 
 from . import download_brdc, extract_gzip
+from .geoid import GeoidHeight
 
 
 GPST_START = datetime(1980, 1, 6)
@@ -408,3 +409,143 @@ class Orbit:
         ecef = self.calc_ecef_xyz_gps_gal_bd()
         ecef_glo = self.calc_ecef_xyz_glo()
         self.sat_xyz = pd.concat([ecef, ecef_glo], axis=0)
+    
+    def get_glo_frequency_numbers(self) -> pd.DataFrame:
+        """Returns the frequency number for all Glonass satellites.
+
+        :return: Frequency numbers in dataframe
+        :rtype: pandas.DataFrame
+        """
+        sats_glo = [sv for sv in self.navdata.index.to_list() if sv[0] == "R"]
+        return self.navdata.FreqNum.loc[sats_glo].groupby(["sv"]).first()
+    
+    def calc_corr_iono(self, station_llh: pd.DataFrame, sats_aer: pd.DataFrame) -> pd.DataFrame:
+        """Calculates slant ionospheric delays.
+
+        :param station_llh: Observation station coordinates
+        :type station_llh: pandas.DataFrame
+        :param sats_aer: Horizontal coordinates of satellites
+        :type sats_aer: pandas.DataFrame
+        :return: Ionospheric corrections
+        :rtype: pandas.DataFrame
+        """
+        sats_el_sc = sats_aer["elevation"] / 180
+        sats_ipp_dist_sc = 0.0137 / (sats_el_sc + 0.11) - 0.022
+        
+        lat_sc, lon_sc, _ = station_llh.to_numpy().flatten() / 180
+        ipp_lat_sc = lat_sc + sats_ipp_dist_sc * np.cos(np.radians(sats_aer["azimut"]))
+
+        sc_75 = 75 / 180
+        ipp_lat_sc.loc[ipp_lat_sc > sc_75] = sc_75
+
+        ipp_lat = ipp_lat_sc * np.pi
+        ipp_lon_sc = lon_sc + sats_ipp_dist_sc * np.sin(np.radians(sats_aer["azimut"])) / np.cos(ipp_lat)
+        ipp_geolat_sc = ipp_lat_sc + 0.064 * np.cos((ipp_lon_sc - 1.617) * np.pi)
+
+        epoch_sod = self.epoch.hour * 3600 + self.epoch.minute * 60 + self.epoch.second
+        epoch_ipp = 43200 * ipp_lon_sc + epoch_sod
+        
+        header = gr.rinexheader(self.brdcpath)
+        gpsa: list[float] = header["IONOSPHERIC CORR"]["GPSA"]
+        gpsb: list[float] = header["IONOSPHERIC CORR"]["GPSB"]
+
+        a2 = a4 = 0
+        for i, (a, b) in enumerate(zip(gpsa, gpsb)):
+            a2 += a * pow(ipp_geolat_sc, i)
+            a4 += b * pow(ipp_geolat_sc, i)
+
+        a2.loc[a2 < 0] = 0
+        a4.loc[a4 < 72000] = 72000
+        a1 = 5e-9
+        a3 = 50400
+
+        x = (2 * np.pi * (epoch_ipp - a3) / a4)
+        dt_v_l1 = a1 + a2 * np.cos(x)
+        dt_v_l1.loc[abs(x) > np.pi / 2] = a1
+
+        c = 299792458
+        dl_v_l1 = c * dt_v_l1
+        glo_k = self.get_glo_frequency_numbers()
+        glo_sats = glo_k.index.tolist()
+
+        f_l1 = 1575.42
+        dl_v = dl_v_l1
+        dl_v.loc[glo_sats] = c * dt_v_l1.loc[glo_sats] * f_l1**2 / (1602 + glo_k * 9 / 16)**2
+
+        return dl_v * (1 + 16 * (0.53 - sats_el_sc)**3)
+    
+    def calc_corr_tropo(self, station_llh: pd.DataFrame, sats_aer: pd.DataFrame) -> pd.DataFrame:
+        """Calculates slant topospheric delays.
+
+        :param station_llh: Observation station coordinates
+        :type station_llh: pandas.DataFrame
+        :param sats_aer: Horizontal coordinates of satellites
+        :type sats_aer: pandas.DataFrame
+        :return: Topospheric corrections
+        :rtype: pandas.DataFrame
+        """
+        pgm_path = os.path.join(os.path.dirname(__file__), "egm2008-5.pgm")
+        gh = GeoidHeight(pgm_path)
+        lat, lon, h = station_llh.to_numpy().flatten()
+        undulation = gh.get(float(lat), float(lon))
+        h -= undulation
+        
+        t = 291.16 - 0.0065 * h
+        p = 1013.25 * (1 - 2.26e-5 * h)**5.225
+        rh = 0.5 * np.exp(-6.3976e-4 * h)
+        tc = t - 273.15
+        ew = 6.112 * np.exp((17.62 * tc) / (243.12 + tc))
+        e = rh * ew
+
+        z = np.radians(90 - sats_aer["elevation"])
+        h_km = h / 1000
+
+        b = (
+            1.1549
+            - 0.1551 * h_km
+            + 0.0074 * h_km**2
+        )
+        dr = (
+            -0.0164
+            + 0.0027 * h_km
+            - 0.00025 * h_km**2
+            + (
+                0.3773
+                - 0.0675 * h_km
+                + 0.0043 * h_km**2
+            ) / (
+                82.7119
+                - np.degrees(z)
+            )
+        )
+
+        return (
+            0.002277 / np.cos(z) * (
+                p
+                + (1255 / t + 0.05) * e
+                - b * np.tan(z)**2
+            )
+            + dr
+        )
+    
+    def calc_atmospheric_delays(self, station_llh: pd.DataFrame, sats_aer: pd.DataFrame) -> pd.DataFrame:
+        """Calculates slant atmospheric delays.
+
+        :param station_llh: Observation station coordinates
+        :type station_llh: pandas.DataFrame
+        :param sats_aer: Horizontal coordinates of satellites
+        :type sats_aer: pandas.DataFrame
+        :return: Atmospheric corrections
+        :rtype: pandas.DataFrame
+        """
+        tropo = self.calc_corr_tropo(station_llh, sats_aer)
+        iono = self.calc_corr_iono(station_llh, sats_aer)
+
+        df = pd.DataFrame(
+            {
+                "delay_iono": iono,
+                "delay_tropo": tropo
+            }
+        )
+
+        return df

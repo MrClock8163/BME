@@ -6,7 +6,6 @@ import pandas as pd
 from gnsscalc import load_coords
 from gnsscalc.transform import Ellipsoid, Transformer
 from gnsscalc.satnav import Orbit
-from gnsscalc.visualize import skyplot
 
 
 def main():
@@ -37,7 +36,16 @@ def main():
         )
     )
 
-    skyplot(coords, station_df, epoch, 10, True)
+    corr = orb.calc_atmospheric_delays(transf.xyz2llh(station_df), coords)
+    complete_data = pd.concat([coords, corr], axis=1)
+    visible_corr = complete_data[complete_data["elevation"] >= 10][["elevation", "delay_iono", "delay_tropo"]]
+
+    visible_corr.to_csv(
+        os.path.join(
+            savedir,
+            f"satcorrs_{station[0]:s}_{epoch:%Y%m%d_%H%M%S}.csv"
+        )
+    )
 
 
 if __name__ == "__main__":
