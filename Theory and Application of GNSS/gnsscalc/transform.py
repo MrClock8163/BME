@@ -138,7 +138,7 @@ class Transformer:
         N_i = self.ell.a / np.sqrt(1 - self.ell.e12 * np.sin(phi_0)**2)
         h_i = p / np.cos(phi_0) - N_i
         phi_i = np.atan(z / (p * (1 - self.ell.e12 * N_i / (N_i + h_i))))
-        h_i = p / np.cos(phi_0) - N_i
+        h_i = p / np.cos(phi_i) - N_i
 
         phi = np.degrees(phi_i)
 

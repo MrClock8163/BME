@@ -20,17 +20,17 @@ def download_brdc(date: datetime, dirpath: str) -> str:
     :rtype: str
     """
     doy = date.timetuple().tm_yday
-    url = f"https://igs.bkg.bund.de/root_ftp/IGS/BRDC/{date.year:d}/{doy:03d}/BRDM00DLR_S_{date.year:d}{doy:03d}0000_01D_MN.rnx.gz"
     filepath = os.path.join(dirpath, f"BRDM00DLR_S_{date.year:d}{doy:03d}0000_01D_MN.rnx.gz")
     if os.path.isfile(filepath):
         return filepath
 
+    url = f"https://igs.bkg.bund.de/root_ftp/IGS/BRDC/{date.year:d}/{doy:03d}/BRDM00DLR_S_{date.year:d}{doy:03d}0000_01D_MN.rnx.gz"
     path, response = urlretrieve(url, filepath)
 
-    return filepath
+    return path
 
 
-def extract_brdc(filepath: str) -> str:
+def extract_gzip(filepath: str) -> str:
     """Extracts compressed RINEX navigation file.
 
     :param filepath: path to the compressed file

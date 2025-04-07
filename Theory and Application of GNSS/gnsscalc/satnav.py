@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import georinex as gr
 
-from . import download_brdc, extract_brdc
+from . import download_brdc, extract_gzip
 
 
 GPST_START = datetime(1980, 1, 6)
@@ -29,7 +29,7 @@ class Orbit:
             raise ValueError("specified path does not exist or is not a directory")
 
         gz = download_brdc(self.epoch, directory)
-        self.brdcpath: str = extract_brdc(gz)
+        self.brdcpath: str = extract_gzip(gz)
         self.satellites: set[str] = set()
         self.navdata: pd.DataFrame | None = None
         self.sat_xyz: pd.DataFrame | None = None
