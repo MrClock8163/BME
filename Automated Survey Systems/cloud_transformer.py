@@ -4,7 +4,6 @@ from copy import deepcopy
 from typing import Callable
 
 import numpy as np
-import open3d as o3d
 import laspy as lp
 import pyproj as proj
 from pyproj.transformer import TransformerGroup
@@ -20,16 +19,8 @@ def load_las(filepath: str) -> lp.LasData:
     return las
 
 
-def load_cloud(filepath: str) -> o3d.t.geometry.PointCloud:
-    return o3d.t.io.read_point_cloud(filepath)
-
-
 def write_las(las: lp.LasData, filepath: str):
     las.write(filepath)
-
-
-def write_cloud(pc: o3d.t.geometry.PointCloud, filepath: str):
-    o3d.t.io.write_point_cloud(filepath, pc)
 
 
 def update_las(las: lp.LasData, points: np.ndarray, crs: proj.CRS) -> lp.LasData:
@@ -143,7 +134,7 @@ def cli():
     args = parser.parse_args()
 
     cloud = load_las(args.input)
-    transform_las(cloud, utm34n_to_eov, proj.CRS.from_epsg(10660), True)
+    transform_las(cloud, quasi_utm34n_to_eov, proj.CRS.from_epsg(10660), True)
     write_las(cloud, args.output)
 
 
