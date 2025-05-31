@@ -1,0 +1,4 @@
+numpy
+scipy
+hatanaka
+georinex==1.16.1

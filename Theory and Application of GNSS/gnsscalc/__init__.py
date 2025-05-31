@@ -6,6 +6,7 @@ from typing import Literal
 import gzip
 
 import pandas as pd
+from hatanaka import decompress_on_disk
 
 
 def download_brdc(date: datetime, dirpath: str) -> str:
@@ -30,6 +31,18 @@ def download_brdc(date: datetime, dirpath: str) -> str:
     return path
 
 
+def download_obs(network: str, station: str, date: datetime, dirpath: str) -> str:
+    doy = date.timetuple().tm_yday
+    filepath = os.path.join(dirpath, f"{station}_R_{date.year:d}{doy:03d}0000_01D_30S_MO.crx.gz")
+    if os.path.isfile(filepath):
+        return filepath
+
+    url = f"https://igs.bkg.bund.de/root_ftp/{network}/obs/{date.year:d}/{doy:03d}/{station}_R_{date.year:d}{doy:03d}0000_01D_30S_MO.crx.gz"
+    path, response = urlretrieve(url, filepath)
+
+    return path
+
+
 def extract_gzip(filepath: str) -> str:
     """Extracts compressed RINEX navigation file.
 
@@ -46,6 +59,16 @@ def extract_gzip(filepath: str) -> str:
         f.write(zip.read())
 
     return outpath
+
+
+def decompress_crx(filepath: str) -> str:
+    outpath = os.path.splitext(filepath)[0] + ".rnx"
+    if os.path.isfile(outpath):
+        return outpath
+
+    path = str(decompress_on_disk(filepath))
+    assert path == outpath
+    return path
 
 
 def load_coords(coo: list[tuple[str, float, float, float]], format: Literal['XYZ', 'LLH']) -> pd.DataFrame:
